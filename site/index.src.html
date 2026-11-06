@@ -119,6 +119,10 @@ h1{font-size:clamp(40px,4.4vw,62px);font-weight:800;line-height:1.02;letter-spac
 .cell i.e{background:var(--accent)}
 .has-e::after{content:"";position:absolute;inset:-1px;border:2px solid var(--accent);border-radius:9px;opacity:0;pointer-events:none}
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;font-size:12.5px;color:var(--ink2)}
+/* the window is as tall as its tallest level: the field and its legend sit in the middle of the space under the head */
+.l-machine{display:flex;flex-direction:column}
+.l-machine .field{margin-top:auto}
+.l-machine .legend{margin-bottom:auto}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .sw{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--ink3)}
 .sw.box{width:12px;height:12px;border:1px solid var(--border2);border-radius:3px;background:var(--surface)}
@@ -178,6 +182,11 @@ h2{font-size:clamp(30px,3.3vw,46px);font-weight:800;line-height:1.06;letter-spac
 .p-n{font:600 13px var(--mono);color:var(--accent-ink)}
 .p-copy h3{margin-top:8px;font-size:30px;font-weight:800;letter-spacing:-.02em}
 .ptx{margin-top:16px;color:var(--ink2)}
+/* the 4 stages of 1 improve prompt: a plain numbered list */
+.flow{margin:14px 0 0;padding:0 0 0 30px;color:var(--ink2);font-size:16px}
+.flow li{padding:3px 0 3px 4px}
+.flow li::marker{font:600 13px var(--mono);color:var(--accent-ink)}
+.flow b{color:var(--ink1)}
 .chipcmd{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:8px 12px;border-radius:8px;background:var(--cmd);color:var(--cmd-ink);font:14px var(--mono)}
 .chain-ctl{display:flex;align-items:center;gap:12px;margin-top:28px}
 .chain-ctl .pp{margin-left:0}
@@ -527,7 +536,14 @@ html{scroll-behavior:smooth}
         <div class="p-copy">
           <p class="p-n">Step 2</p>
           <h3>Improve</h3>
-          <p class="ptx">In Claude Code, run <code>/orangu:improve</code>. The brain finds patterns and proposes changes: skills, agents, effort, model choice, CLIs and scripts. You approve each change by its id. Then orangu checks it on your later sessions, beyond chance.</p>
+          <p class="ptx">In Claude Code, run <code>/orangu:improve</code>. With no input, 1 prompt runs the whole chain.</p>
+          <ol class="flow">
+            <li><b>Measure.</b> orangu reads your sessions with no model.</li>
+            <li><b>Investigate.</b> 2 analysts look for patterns, at high effort.</li>
+            <li><b>Interview.</b> If orangu does not know your work yet, it asks about your role. You can skip it.</li>
+            <li><b>Suggest.</b> The brain proposes changes to skills, agents, effort, models and scripts.</li>
+          </ol>
+          <p class="ptx">You approve each change by its id. Then orangu checks it on your later sessions, beyond chance.</p>
           <div class="chipcmd"><span class="p" aria-hidden="true">&gt;</span><code>/orangu:improve</code></div>
         </div>
         <figure class="stage imp">
@@ -555,7 +571,7 @@ html{scroll-behavior:smooth}
         <div class="p-copy">
           <p class="p-n">Step 3</p>
           <h3>Tune</h3>
-          <p class="ptx">The first time, or when you ask, the interview asks about your role and how you work. orangu keeps your answers. The brain ranks each later proposal with them.</p>
+          <p class="ptx">Run <code>/orangu:interview</code> at any time to change your answers. The interview asks about your role and how you work. orangu keeps your answers, and the brain ranks each later proposal with them.</p>
           <div class="chipcmd"><span class="p" aria-hidden="true">&gt;</span><code>/orangu:interview</code></div>
         </div>
         <figure class="stage">
@@ -638,6 +654,7 @@ html{scroll-behavior:smooth}
     <div class="hosts">
       <article class="host reveal">
         <h3>Claude Code</h3>
+        <p>Add the plugin once. Then <code>/orangu:improve</code> runs the whole chain in 1 prompt.</p>
         <div class="stack">
           <div class="cmdrow"><code>/plugin marketplace add NissanOhana/orangu</code><button class="cp2" type="button" data-cmd="/plugin marketplace add NissanOhana/orangu" data-copied="Copied" aria-label="Copy the command /plugin marketplace add NissanOhana/orangu"><span data-lbl="Copy">Copy</span></button></div>
           <div class="cmdrow"><code>/plugin install orangu</code><button class="cp2" type="button" data-cmd="/plugin install orangu" data-copied="Copied" aria-label="Copy the command /plugin install orangu"><span data-lbl="Copy">Copy</span></button></div>

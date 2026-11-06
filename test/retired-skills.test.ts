@@ -30,9 +30,7 @@ const CATALOG = 'plugin/skills/README.md'
 const APPLY = '/orangu:apply'
 const APPLY_MAY_NAME = ['plugin/skills/apply/', 'plugin/skills/improve/', CATALOG, 'docs/DETERMINISM.md'] as const
 /** A file that still names a command that it may not name, and the chunk that rewrites it. */
-const BASELINE: Readonly<Record<string, string>> = {
-  'site/index.src.html': 'C-9, the landing rewrite',
-}
+const BASELINE: Readonly<Record<string, string>> = {}
 const TEXT = /\.(?:md|ts|tsx|mjs|js|json|yaml|yml|html|txt|css|jsonl)$/
 
 const inScope = (file: string): boolean =>

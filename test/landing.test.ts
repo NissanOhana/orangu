@@ -98,7 +98,8 @@ describe('the landing source: shape and words', () => {
 
   // The measure: the text after the head, style and script blocks and all tags go, split on white space.
   // The page before the rewrite measured 2,135 words and 8 sections by this measure (about 2,134 in the run plan).
-  // Measured on the rewrite, 2026-11-01: 1,131 words and 6 sections. The caps are the old page: less copy, not more.
+  // Measured on the rewrite, 2026-11-01: 1,131 words and 6 sections. 2026-11-06, with the 4 stages of 1 improve
+  // prompt: 1,188 words. The caps are the old page: less copy, not more.
   it('has 6 sections or fewer, and fewer visible words than the page before it', () => {
     const words = src
       .replace(/<head>[\s\S]*?<\/head>/, ' ')
@@ -321,6 +322,33 @@ describe('the landing chain: 3 steps in 1 tab list', () => {
     expect([...chat.matchAll(/<dd>([^<]+)<\/dd>/g)].map((m) => m[1])).toEqual(['I write and ship code.', 'One orchestrator session with subagents.', 'Fewer tokens.'])
     // the interview copy names no question count
     expect(htmlText(chain)).not.toMatch(/\b\d+ questions\b/)
+  })
+
+  it('tells the 4 stages of 1 improve prompt in order, with an interview that the reader can skip', () => {
+    const step = element(chain, /<div class="panel p1"/)
+    const stages = [...element(step, /<ol class="flow"/).matchAll(/<li><b>([^<]+)<\/b> ([^<]+)<\/li>/g)].map((m) => [m[1], m[2]])
+    expect(stages.map(([stage]) => stage)).toEqual(['Measure.', 'Investigate.', 'Interview.', 'Suggest.'])
+    expect(stages[0]![1]).toContain('with no model')
+    expect(stages[2]![1]).toContain('You can skip it.')
+    expect(htmlText(step)).toContain('In Claude Code, run /orangu:improve . With no input, 1 prompt runs the whole chain.')
+    // step 3 is the command that runs the interview again
+    expect(htmlText(element(chain, /<div class="panel p2"/))).toContain('Run /orangu:interview at any time to change your answers.')
+  })
+
+  it('names the 2 analysts and their effort only while improve starts them and their agents ask for high effort or more', () => {
+    expect(htmlText(chain)).toContain('2 analysts look for patterns, at high effort.')
+    const improve = read('plugin/skills/improve/SKILL.md')
+    for (const agent of ['harness-pm-analyst', 'harness-devex-analyst']) {
+      expect(improve, `improve starts ${agent}`).toContain(`orangu:${agent}`)
+      expect(read(`plugin/agents/${agent}.md`), `${agent} asks for high effort or more`).toMatch(/^effort: (?:high|xhigh|max)$/m)
+    }
+  })
+
+  it('says that the reader can run /orangu:interview only while the skill shows in the / menu', () => {
+    const interview = read('plugin/skills/interview/SKILL.md')
+    const frontmatter = interview.slice(0, interview.indexOf('\n---', 3))
+    expect(frontmatter).toContain('name: interview')
+    expect(frontmatter).not.toMatch(/user-invocable:\s*false/)
   })
 })
 

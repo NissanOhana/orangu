@@ -64,6 +64,7 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // The loop and front-door rewrite: findings 1 -> 0. Measured 100 (285 of 285): each plugin card sentence but the
   // last starts with a word now.
   // The 6-section rewrite (the chain in 3 steps, 2026-11-01): measured 100 (166 of 166), 0 findings. The row stays.
+  // 2026-11-06, with the 4 stages of 1 improve prompt: measured 100 (176 of 176), 0 findings.
   'site/index.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'site/404.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (5 of 5) after the chain line
   'site/llms.src.txt': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (66 of 66) after the chain lines
