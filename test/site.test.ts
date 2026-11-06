@@ -1059,7 +1059,10 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     // the README promise that an unknown record shows in Coverage and does not stop the analysis (the only public line
     // of that promise), "as a custom skill" for the upload, and the check clause of the DETERMINISM save command. The
     // lead pays back part of it: it no longer repeats step 1 and the promises. The cap moves 38,562 -> 38,632.
-    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(38_632)
+    // Named growth, measured 2026-11-06 after the rebase on ede8917 (the hidden skills): 38,631 B -> 38,668 B (+37).
+    // Cause: DETERMINISM says that the Codex mirrors drop `user-invocable` too, so the hidden skills stay hidden only in
+    // Claude Code (scripts/build.mjs drops the line since C-5b). The cap moves 38,632 -> 38,669.
+    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(38_669)
     // llms.txt states a size for this file: the claim holds while the file is under it
     const claimedKb = Number(/docs concatenated \(under (\d+) KB\)/.exec(llms)?.[1])
     expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(claimedKb * 1_000)
