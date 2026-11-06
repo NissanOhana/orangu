@@ -195,9 +195,11 @@ describe('the chain lines say only what the skills do', () => {
     expect(helpText()).toContain('\n  /orangu:interview  3. Tune: tell orangu your role and how you work.\n                     The first run of /orangu:improve asks for it.\n')
     expect(appRows()).toContain(CLOSING_LINES[0])
     expect(nextHtml(undefined)).toContain('<li>The first run asks about your role and your work.</li>')
-    // so the first run of improve (no profile and an empty todo read) asks 1 question that offers the interview
-    const improve = read('plugin/skills/improve/SKILL.md')
-    for (const option of ['Interview me first', 'Review without it']) expect(improve.includes(option), `plugin/skills/improve/SKILL.md offers "${option}"`).toBe(true)
+    // so the first run of improve (no profile file) asks 1 question that offers the interview. Since C-14 (2026-11-06), it
+    // asks it in stage 3 of the review, after the investigation and before any record.
+    const review = read('plugin/skills/improve/references/review.md')
+    const stage3 = review.slice(review.indexOf('## 3. Interview (optional)'), review.indexOf('## 4. '))
+    for (const option of ['Interview me now', 'Skip the interview']) expect(stage3.includes(option), `stage 3 of the review of improve offers "${option}"`).toBe(true)
   })
 
   it('the export line of the app needs the export verb and an export run of exactly 2 files', async () => {

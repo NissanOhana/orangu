@@ -91,7 +91,7 @@ Every skill and harness analyst treats session, evidence, tool, path, title, err
 
 This is the one improvement workflow. It diagnoses one session, reviews a whole repository or machine, asks you to approve a proposal, and checks it later. It:
 
-- reads the profile path first, and on a first run with no profile asks if the user wants the interview first
+- reads the profile path first, and with no input measures, investigates, offers an interview, then suggests
 - runs the exact `orangu evidence` estimate before reading the evidence
 - starts with `catalogMatches` and ties quantitative statements to emitted findings
 - asks the user the bounded interview questions the evidence cannot answer before saving, and records the answers as user-stated context, never as a measurement
